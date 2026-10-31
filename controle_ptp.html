@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de PTP</title>
+<style>
+  * { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
+  body { margin: 10px; background: #f4f6f8; color: #222; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  p.sub { color: #666; font-size: 12px; margin: 0 0 10px; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; align-items: center; }
+  button {
+    padding: 8px 12px; border: none; border-radius: 6px;
+    background: #1e6fd9; color: #fff; font-size: 13px; cursor: pointer;
+  }
+  button:hover { background: #1557a8; }
+  button.success { background: #27ae60; }
+  button.success:hover { background: #1e8449; }
+  button.warn { background: #e67e22; }
+  button.warn:hover { background: #ca6f1e; }
+  button.danger { background: #c0392b; }
+  button.danger:hover { background: #922b21; }
+
+  .counter { font-size: 12px; color: #444; margin-bottom: 8px; }
+
+  #alertBanner {
+    display: none; background: #fff3cd; border: 1px solid #ffc107;
+    border-left: 5px solid #f39c12; border-radius: 6px;
+    padding: 10px 12px; margin-bottom: 10px; font-size: 13px; color: #7a5c00;
+  }
+  #alertBanner strong { color: #b9770e; }
+  #alertBanner ul { margin: 6px 0 0 18px; padding: 0; }
+  #alertBanner li { margin-bottom: 3px; }
+
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; min-width: 780px; border-collapse: collapse; background: #fff; font-size: 12px; }
+  th, td { border: 1px solid #d0d7de; padding: 5px 6px; text-align: left; }
+  th { background: #1e6fd9; color: #fff; font-weight: 600; position: sticky; top: 0; }
+  tr:nth-child(even) td { background: #fafbfc; }
+
+  input, select {
+    width: 100%; padding: 5px; border: 1px solid #ccd3da;
+    border-radius: 4px; font-size: 12px; background: #fff;
+  }
+  input:focus, select:focus { outline: 2px solid #1e6fd9; border-color: transparent; }
+
+  td.sim  { background: #fff3cd !important; }
+  td.ok   { background: #d4edda !important; }
+  td.risk { background: #f8d7da !important; }
+  td.meio { background: #ffe0b2 !important; }
+  td.venc { background: #f8d7da !important; color: #a00; font-weight: 600; }
+
+  .del { background: #e74c3c; color: #fff; border: none; border-radius: 4px;
+         padding: 4px 8px; cursor: pointer; font-size: 11px; }
+  .del:hover { background: #c0392b; }
+
+  .save-status { font-size: 11px; color: #27ae60; margin-left: 8px; }
+</style>
+</head>
+<body>
+
+<h1>Controle de PTP</h1>
+<p class="sub">Salvamento automático • Ordenado por empresa • Alerta no meio da validade</p>
+
+<div class="toolbar">
+  <button onclick="addRow()">+ Linha</button>
+  <button class="warn" onclick="sortTable()">🔤 Ordenar</button>
+  <button class="success" onclick="exportCSV()">⬇ CSV</button>
+  <button class="danger" onclick="clearAll()">🗑 Limpar</button>
+  <span class="save-status" id="saveStatus">✔ Salvo</span>
+</div>
+
+<div id="alertBanner"></div>
+<div class="counter" id="counter"></div>
+
+<div class="table-wrap">
+<table id="tbl">
+  <thead>
+    <tr>
+      <th style="width:14%">Empresa</th>
+      <th style="width:18%">Atividade</th>
+      <th style="width:10%">Início</th>
+      <th style="width:10%">Fim</th>
+      <th style="width:9%">Nova PTP?</th>
+      <th style="width:8%">PTP?</th>
+      <th style="width:10%">Nº PTP</th>
+      <th style="width:9%">Meio</th>
+      <th style="width:7%">Status</th>
+      <th style="width:5%">Ação</th>
+    </tr>
+  </thead>
+  <tbody id="body"></tbody>
+</table>
+</div>
+
+<script>
+/* ================= CONSTANTES ================= */
+const EMPRESAS = ["Falcare","RB Soluções TST","RB Soluções Mecânica","Torqumec","Evastec"];
+const ATIVIDADES = [
+  "Trabalho a Quente","Trabalho em Altura","Elétrica","Espaço Confinado",
+  "Montagem Mecânica","Montagem de Infra Elétrica","Geral"
+];
+const SIM_NAO = ["Sim","Não"];
+const STORAGE_KEY = "controle_ptp_v2";
+
+/* ================= UTIL ================= */
+function options(arr, selected="") {
+  return `<option value=""></option>` +
+    arr.map(v => `<option ${v===selected?"selected":""}>${v}</option>`).join("");
+}
+
+function markSaved() {
+  const el = document.getElementById("saveStatus");
+  el.textContent = "💾 Salvando...";
+  el.style.color = "#e67e22";
+  clearTimeout(window._saveTimer);
+  window._saveTimer = setTimeout(() => {
+    el.textContent = "✔ Salvo";
+    el.style.color = "#27ae60";
+  }, 400);
+}
+
+function toDate(str) {
+  if (!str) return null;
+  const [y,m,d] = str.split("-").map(Number);
+  return new Date(y, m-1, d);
+}
+
+function daysBetween(a, b) {
+  if (!a || !b) return 0;
+  return Math.round((b - a) / (1000*60*60*24));
+}
+
+function midDate(inicio, fim) {
+  const a = toDate(inicio), b = toDate(fim);
+  if (!a || !b) return null;
+  const total = daysBetween(a, b);
+  const mid = new Date(a);
+  mid.setDate(mid.getDate() + Math.ceil(total / 2));
+  return mid;
+}
+
+function fmtDate(d) {
+  if (!d) return "—";
+  return d.toLocaleDateString("pt-BR");
+}
+
+/* ================= LINHA ================= */
+function addRow(data = {}, skipSave = false) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><select class="f-emp" onchange="onChangeField()">${options(EMPRESAS, data.empresa)}</select></td>
+    <td><select class="f-atv" onchange="onChangeField()">${options(ATIVIDADES, data.atividade)}</select></td>
+    <td><input type="date" class="f-ini" value="${data.inicio||""}" onchange="onChangeField()"></td>
+    <td><input type="date" class="f-fim" value="${data.fim||""}" onchange="onChangeField()"></td>
+    <td class="col-nova"><select class="f-nova" onchange="onChangeField()">${options(SIM_NAO, data.nova)}</select></td>
+    <td class="col-res"><select class="f-res" onchange="onChangeField()">${options(SIM_NAO, data.reserva)}</select></td>
+    <td><input type="text" class="f-num" placeholder="Ex.: PTP 19" value="${data.nump||""}" onchange="onChangeField()"></td>
+    <td class="col-meio"><span class="meio-txt">—</span></td>
+    <td class="col-status"><span class="status-txt">—</span></td>
+    <td><button class="del" onclick="this.closest('tr').remove(); onChangeField();">X</button></td>
+  `;
+  document.getElementById("body").appendChild(tr);
+  if (!skipSave) onChangeField(false);
+}
+
+/* ================= COLETA DE DADOS ================= */
+function collectData() {
+  const rows = [];
+  document.querySelectorAll("#body tr").forEach(tr => {
+    rows.push({
+      empresa: tr.querySelector(".f-emp").value,
+      atividade: tr.querySelector(".f-atv").value,
+      inicio: tr.querySelector(".f-ini").value,
+      fim: tr.querySelector(".f-fim").value,
+      nova: tr.querySelector(".f-nova").value,
+      reserva: tr.querySelector(".f-res").value,
+      nump: tr.querySelector(".f-num").value
+    });
+  });
+  return rows;
+}
+
+/* ================= RENDER ================= */
+function renderAll(data) {
+  document.getElementById("body").innerHTML = "";
+  data.forEach(d => addRow(d, true));
+  updateAlerts();
+}
+
+/* ================= SALVAR / CARREGAR ================= */
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(collectData()));
+    markSaved();
+  } catch (e) { console.warn("Erro ao salvar:", e); }
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { console.warn("Erro ao carregar:", e); }
+  return null;
+}
+
+/* ================= ORDENAR ================= */
+function sortTable(skipSave = false) {
+  const data = collectData();
+  data.sort((a, b) => {
+    const e = (a.empresa||"").localeCompare(b.empresa||"", "pt-BR");
+    if (e !== 0) return e;
+    return (a.inicio||"").localeCompare(b.inicio||"");
+  });
+  renderAll(data);
+  if (!skipSave) save();
+}
+
+/* ================= ALTERAÇÃO EM CAMPO ================= */
+function onChangeField(doSort = false) {
+  if (doSort) sortTable(true);
+  updateAlerts();
+  save();
+}
+
+/* ================= ALERTAS / CONTADORES ================= */
+function updateAlerts() {
+  const rows = document.querySelectorAll("#body tr");
+  const hoje = new Date();
+  hoje.setHours(0,0,0,0);
+
+  let total = rows.length, comReserva = 0, semReserva = 0, novas = 0;
+  let alertasMeio = [];
+
+  rows.forEach(tr => {
+    const emp = tr.querySelector(".f-emp").value;
+    const atv = tr.querySelector(".f-atv").value;
+    const inicio = tr.querySelector(".f-ini").value;
+    const fim = tr.querySelector(".f-fim").value;
+    const nova = tr.querySelector(".f-nova").value;
+    const res  = tr.querySelector(".f-res").value;
+    const nump = tr.querySelector(".f-num").value;
+
+    const tdNova = tr.querySelector(".col-nova");
+    const tdRes  = tr.querySelector(".col-res");
+    const tdMeio = tr.querySelector(".col-meio");
+    const tdStatus = tr.querySelector(".col-status");
+    const meioTxt = tr.querySelector(".meio-txt");
+    const statusTxt = tr.querySelector(".status-txt");
+
+    tdNova.className = "col-nova" + (nova === "Sim" ? " sim" : "");
+    tdRes.className  = "col-res"  + (res === "Sim" ? " ok" : res === "Não" ? " risk" : "");
+
+    if (nova === "Sim") novas++;
+    if (res === "Sim") comReserva++;
+    if (res === "Não") semReserva++;
+
+    const dIni = toDate(inicio);
+    const dFim = toDate(fim);
+    const mid = midDate(inicio, fim);
+
+    tdMeio.className = "col-meio";
+    tdStatus.className = "col-status";
+    meioTxt.textContent = mid ? fmtDate(mid) : "—";
+    statusTxt.textContent = "—";
+
+    if (dIni && dFim) {
+      const totalDias = daysBetween(dIni, dFim);
+
+      if (hoje > dFim) {
+        tdStatus.classList.add("venc");
+        statusTxt.textContent = "VENCIDA";
+        tdMeio.classList.add("venc");
+      } else if (hoje >= mid) {
+        tdStatus.classList.add("meio");
+        statusTxt.textContent = "SOLICITAR PTP";
+        tdMeio.classList.add("meio");
+
+        alertasMeio.push({
+          empresa: emp || "—",
+          atividade: atv || "—",
+          nump: nump || "—",
+          inicio, fim,
+          mid,
+          diasTotais: totalDias,
+          diasRestantes: daysBetween(hoje, dFim)
+        });
+      } else {
+        statusTxt.textContent = "ATIVA";
+      }
+    }
+  });
+
+  document.getElementById("counter").textContent =
+    `Linhas: ${total} | Nova PTP: ${novas} | Com PTP: ${comReserva} | Sem PTP: ${semReserva} | ⚠️ Solicitar nova PTP: ${alertasMeio.length}`;
+
+  const banner = document.getElementById("alertBanner");
+  if (alertasMeio.length === 0) {
+    banner.style.display = "none";
+    banner.innerHTML = "";
+  } else {
+    banner.style.display = "block";
+    banner.innerHTML = `
+      <strong>⚠️ ${alertasMeio.length} PTP(s) — solicitar nova PTP:</strong>
+      <ul>
+        ${alertasMeio.map(a => `
+          <li>
+            <b>${a.empresa}</b> — ${a.atividade} ${a.nump !== "—" ? "(Nº " + a.nump + ")" : ""}
+            • Período: ${fmtDate(toDate(a.inicio))} a ${fmtDate(toDate(a.fim))}
+            • Meio: ${fmtDate(a.mid)}
+            • <b>${a.diasRestantes} dia(s) restante(s)</b>
+          </li>
+        `).join("")}
+      </ul>
+    `;
+  }
+}
+
+/* ================= CSV ================= */
+function exportCSV() {
+  const rows = [["Nome da Empresa","Tipo de Atividade","Data Início","Data Final",
+                 "Nova PTP Solicitada?","PTP?","Nº PTP","Meio da PTP","Status"]];
+  collectData().forEach(d => {
+    const mid = midDate(d.inicio, d.fim);
+    let status = "";
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    const dIni = toDate(d.inicio), dFim = toDate(d.fim);
+    if (dIni && dFim) {
+      if (hoje > dFim) status = "VENCIDA";
+      else if (hoje >= mid) status = "SOLICITAR PTP";
+      else status = "ATIVA";
+    }
+    rows.push([d.empresa,d.atividade,d.inicio,d.fim,d.nova,d.reserva,d.nump, mid ? fmtDate(mid) : "", status]);
+  });
+
+  const csv = rows.map(r => r.map(c => `"${(c||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8;"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `controle_ptp_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+/* ================= LIMPAR ================= */
+function clearAll() {
+  if (!confirm("Apagar todas as linhas? Esta ação não pode ser desfeita.")) return;
+  document.getElementById("body").innerHTML = "";
+  updateAlerts();
+  save();
+}
+
+/* ================= INICIALIZAÇÃO ================= */
+(function init() {
+  const saved = load();
+  if (saved && saved.length) {
+    renderAll(saved);
+  } else {
+    addRow({empresa:"Evastec", atividade:"Montagem de Infra Elétrica", inicio:"2026-10-31", fim:"2026-11-06", nova:"Não", reserva:"Sim", nump:"PTP 19"}, true);
+    addRow({empresa:"Torqumec", atividade:"Trabalho em Altura", inicio:"2026-10-31", fim:"2026-11-02", nova:"Não", reserva:"Não"}, true);
+    addRow({empresa:"RB Soluções Mecânica", atividade:"Elétrica", inicio:"2026-10-31", fim:"2026-10-31", nova:"Sim", reserva:"Não"}, true);
+    addRow({empresa:"Falcare", atividade:"Montagem Mecânica", inicio:"2026-10-31", fim:"2026-11-05", nova:"Sim", reserva:"Sim", nump:"PTP 20"}, true);
+    updateAlerts();
+    save();
+  }
+})();
+</script>
+
+</body>
+</html>
