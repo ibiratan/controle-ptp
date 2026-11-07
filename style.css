@@ -1,0 +1,97 @@
+* { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
+body { margin: 10px; background: #f4f6f8; color: #222; }
+h1 { font-size: 17px; margin: 0 0 4px; }
+p.sub { color: #666; font-size: 12px; margin: 0 0 10px; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; align-items: center; }
+button { padding: 8px 12px; border: none; border-radius: 6px; background: #1e6fd9; color: #fff; font-size: 13px; cursor: pointer; }
+button:hover { background: #1557a8; }
+button.success { background: #27ae60; }
+button.warn { background: #e67e22; }
+button.danger { background: #c0392b; }
+
+.counter { font-size: 12px; color: #444; margin-bottom: 8px; }
+
+/* Painel de pendências */
+#painelPendencias {
+  display: none;
+  background: #fff;
+  border: 1px solid #f39c12;
+  border-left: 5px solid #f39c12;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+#painelPendencias h3 { margin: 0 0 8px; font-size: 14px; color: #d35400; }
+.card-pendencia {
+  background: #fef9e7;
+  border: 1px solid #f9e79f;
+  border-radius: 4px;
+  padding: 8px;
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.card-pendencia div { font-size: 12px; line-height: 1.4; }
+.card-pendencia strong { color: #b9770e; }
+
+.btn-zap { background: #25D366; font-size: 11px; padding: 5px 8px; color: white; border: none; border-radius: 4px; cursor: pointer; }
+.btn-ok  { background: #27ae60; font-size: 11px; padding: 5px 8px; color: white; border: none; border-radius: 4px; cursor: pointer; }
+
+/* Tabela */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; min-width: 1400px; border-collapse: collapse; background: #fff; font-size: 12px; }
+th, td { border: 1px solid #d0d7de; padding: 5px 6px; text-align: left; }
+th { background: #1e6fd9; color: #fff; font-weight: 600; position: sticky; top: 0; }
+tr:nth-child(even) td { background: #fafbfc; }
+
+input, select {
+  width: 100%;
+  padding: 5px;
+  border: 1px solid #ccd3da;
+  border-radius: 4px;
+  font-size: 12px;
+  background: #fff;
+}
+input:focus, select:focus { outline: 2px solid #1e6fd9; border-color: transparent; }
+
+/* Status */
+td.status-ativa { color: #555; }
+td.status-aguardando { background: #ffe0b2 !important; font-weight: bold; color: #d35400; }
+td.status-pendente { background: #fff3cd !important; font-weight: bold; color: #b9770e; }
+td.status-reservado { background: #d4edda !important; color: #155724; font-weight: bold; }
+td.status-vencida { background: #f8d7da !important; color: #a00; font-weight: bold; }
+
+.del { background: #e74c3c; color: #fff; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 11px; }
+.save-status { font-size: 11px; color: #27ae60; margin-left: 8px; }
+
+/* Modal */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+.modal-content { background: #fff; width: 90%; max-width: 400px; border-radius: 8px; padding: 20px; text-align: center; }
+.modal-content h2 { margin: 0 0 10px; font-size: 18px; color: #d35400; }
+.modal-content p { font-size: 14px; color: #444; margin-bottom: 20px; }
+.modal-botoes { display: flex; gap: 10px; justify-content: center; }
+.btn-modal {
+  padding: 10px 15px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  flex: 1;
+  color: white;
+}
+.btn-modal.zap { background: #25D366; }
+.btn-modal.fechar { background: #7f8c8d; }

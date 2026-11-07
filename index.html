@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de PTP</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1>Controle de PTP</h1>
+<p class="sub">Salvamento automático • Alerta no meio da validade</p>
+
+<div style="margin-bottom: 10px; background: #fff; padding: 8px; border-radius: 6px; display: flex; align-items: center; gap: 10px; font-size: 12px;">
+  <label><strong>Zap para PTP:</strong></label>
+  <input type="tel" id="numeroZap" placeholder="Ex: 5511999999999" onchange="salvarNumero()" style="padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+</div>
+
+<div class="toolbar">
+  <button onclick="addRow()">Adicionar</button>
+  <button class="warn" onclick="sortTable()">🔤 Ordenar</button>
+  <button class="success" onclick="exportCSV()">⬇ CSV</button>
+  <button class="danger" onclick="clearAll()">🗑 Limpar</button>
+  <span class="save-status" id="saveStatus">✔ Salvo</span>
+</div>
+
+<datalist id="lista-empresas">
+  <option value="Falcare">
+  <option value="RB Soluções TST">
+  <option value="RB Soluções Mecânica">
+  <option value="Torqumec">
+  <option value="Evastec">
+</datalist>
+<datalist id="lista-atividades">
+  <option value="Trabalho a Quente">
+  <option value="Trabalho em Altura">
+  <option value="Elétrica">
+  <option value="Espaço Confinado">
+  <option value="Montagem Mecânica">
+  <option value="Montagem de Infra Elétrica">
+  <option value="Geral">
+</datalist>
+
+<div id="painelPendencias">
+  <h3>⚠️ Ações Pendentes:</h3>
+  <div id="listaPendencias"></div>
+</div>
+
+<div class="counter" id="counter"></div>
+
+<div class="table-wrap">
+<table id="tbl">
+  <thead>
+    <tr>
+      <th style="width:10%">Empresa</th>
+      <th style="width:12%">Atividade</th>
+      <th style="width:8%">Início</th>
+      <th style="width:8%">Fim</th>
+      <th style="width:8%">Nº PTP</th>
+      <th style="width:6%">Nº FA</th>
+      <th style="width:9%">Turno</th>
+      <th style="width:12%">Local da Ativ.</th>
+      <th style="width:9%">Supervisor</th>
+      <th style="width:11%">Status</th>
+      <th style="width:7%">Ação</th>
+    </tr>
+  </thead>
+  <tbody id="body"></tbody>
+</table>
+</div>
+
+<div class="modal-overlay" id="modalAlerta">
+  <div class="modal-content">
+    <h2>⚠️ Renovação de PTP</h2>
+    <p id="modalTexto">Existem PTPs que precisam de ação. Deseja enviar a solicitação via WhatsApp?</p>
+    <div class="modal-botoes">
+      <button class="btn-modal fechar" onclick="fecharModal()">Agora Não</button>
+      <button class="btn-modal zap" onclick="enviarWhatsAppDoModal()">Enviar Zap</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

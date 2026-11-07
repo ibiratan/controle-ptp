@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de PTP</title>
+<style>
+  * { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
+  body { margin: 10px; background: #f4f6f8; color: #222; }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  p.sub { color: #666; font-size: 12px; margin: 0 0 10px; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; align-items: center; }
+  button { padding: 8px 12px; border: none; border-radius: 6px; background: #1e6fd9; color: #fff; font-size: 13px; cursor: pointer; }
+  button:hover { background: #1557a8; }
+  button.success { background: #27ae60; }
+  button.warn { background: #e67e22; }
+  button.danger { background: #c0392b; }
+
+  .counter { font-size: 12px; color: #444; margin-bottom: 8px; }
+
+  #painelPendencias { display: none; background: #fff; border: 1px solid #f39c12; border-left: 5px solid #f39c12; border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+  #painelPendencias h3 { margin: 0 0 8px; font-size: 14px; color: #d35400; }
+  .card-pendencia { background: #fef9e7; border: 1px solid #f9e79f; border-radius: 4px; padding: 8px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .card-pendencia div { font-size: 12px; line-height: 1.4; }
+  .card-pendencia strong { color: #b9770e; }
+  
+  .btn-zap { background: #25D366; font-size: 11px; padding: 5px 8px; color: white; border: none; border-radius: 4px; cursor: pointer;}
+  .btn-ok { background: #27ae60; font-size: 11px; padding: 5px 8px; color: white; border: none; border-radius: 4px; cursor: pointer;}
+
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; min-width: 1400px; border-collapse: collapse; background: #fff; font-size: 12px; }
+  th, td { border: 1px solid #d0d7de; padding: 5px 6px; text-align: left; }
+  th { background: #1e6fd9; color: #fff; font-weight: 600; position: sticky; top: 0; }
+  tr:nth-child(even) td { background: #fafbfc; }
+
+  input, select { width: 100%; padding: 5px; border: 1px solid #ccd3da; border-radius: 4px; font-size: 12px; background: #fff; }
+  input:focus, select:focus { outline: 2px solid #1e6fd9; border-color: transparent; }
+
+  td.status-ativa { color: #555; }
+  td.status-aguardando { background: #ffe0b2 !important; font-weight: bold; color: #d35400; }
+  td.status-pendente { background: #fff3cd !important; font-weight: bold; color: #b9770e; }
+  td.status-reservado { background: #d4edda !important; color: #155724; font-weight: bold; }
+  td.status-vencida { background: #f8d7da !important; color: #a00; font-weight: bold; }
+
+  .del { background: #e74c3c; color: #fff; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 11px; }
+  .save-status { font-size: 11px; color: #27ae60; margin-left: 8px; }
+
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-content { background: #fff; width: 90%; max-width: 400px; border-radius: 8px; padding: 20px; text-align: center; }
+  .modal-content h2 { margin: 0 0 10px; font-size: 18px; color: #d35400; }
+  .modal-content p { font-size: 14px; color: #444; margin-bottom: 20px; }
+  .modal-botoes { display: flex; gap: 10px; justify-content: center; }
+  .btn-modal { padding: 10px 15px; border: none; border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer; flex: 1; color: white;}
+  .btn-modal.zap { background: #25D366; }
+  .btn-modal.fechar { background: #7f8c8d; }
+</style>
+</head>
+<body>
+
+<h1>Controle de PTP</h1>
+<p class="sub">Salvamento automático • Alerta no meio da validade</p>
+
+<div style="margin-bottom: 10px; background: #fff; padding: 8px; border-radius: 6px; display: flex; align-items: center; gap: 10px; font-size: 12px;">
+  <label><strong>Zap para PTP:</strong></label>
+  <input type="tel" id="numeroZap" placeholder="Ex: 5511999999999" onchange="salvarNumero()" style="padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+</div>
+
+<div class="toolbar">
+  <button onclick="addRow()">Adicionar</button>
+  <button class="warn" onclick="sortTable()">🔤 Ordenar</button>
+  <button class="success" onclick="exportCSV()">⬇ CSV</button>
+  <button class="danger" onclick="clearAll()">🗑 Limpar</button>
+  <span class="save-status" id="saveStatus">✔ Salvo</span>
+</div>
+
+<datalist id="lista-empresas">
+  <option value="Falcare"><option value="RB Soluções TST"><option value="RB Soluções Mecânica"><option value="Torqumec"><option value="Evastec">
+</datalist>
+<datalist id="lista-atividades">
+  <option value="Trabalho a Quente"><option value="Trabalho em Altura"><option value="Elétrica"><option value="Espaço Confinado"><option value="Montagem Mecânica"><option value="Montagem de Infra Elétrica"><option value="Geral">
+</datalist>
+
+<div id="painelPendencias">
+  <h3>⚠️ Ações Pendentes:</h3>
+  <div id="listaPendencias"></div>
+</div>
+
+<div class="counter" id="counter"></div>
+
+<div class="table-wrap">
+<table id="tbl">
+  <thead>
+    <tr>
+      <th style="width:10%">Empresa</th>
+      <th style="width:12%">Atividade</th>
+      <th style="width:8%">Início</th>
+      <th style="width:8%">Fim</th>
+      <th style="width:8%">Nº PTP</th>
+      <th style="width:6%">Nº FA</th>
+      <th style="width:9%">Turno</th>
+      <th style="width:12%">Local da Ativ.</th>
+      <th style="width:9%">Supervisor</th>
+      <th style="width:11%">Status</th>
+      <th style="width:7%">Ação</th>
+    </tr>
+  </thead>
+  <tbody id="body"></tbody>
+</table>
+</div>
+
+<div class="modal-overlay" id="modalAlerta">
+  <div class="modal-content">
+    <h2>⚠️ Renovação de PTP</h2>
+    <p id="modalTexto">Existem PTPs que precisam de ação. Deseja enviar a solicitação via WhatsApp?</p>
+    <div class="modal-botoes">
+      <button class="btn-modal fechar" onclick="fecharModal()">Agora Não</button>
+      <button class="btn-modal zap" onclick="enviarWhatsAppDoModal()">Enviar Zap</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = "controle_ptp_reset_v1"; 
+
+function markSaved() {
+  const el = document.getElementById("saveStatus");
+  el.textContent = "💾 Salvando..."; el.style.color = "#e67e22";
+  clearTimeout(window._saveTimer);
+  window._saveTimer = setTimeout(() => { el.textContent = "✔ Salvo"; el.style.color = "#27ae60"; }, 400);
+}
+
+function toDate(str) {
+  if (!str) return null;
+  const [y,m,d] = str.split("-").map(Number);
+  return new Date(y, m-1, d);
+}
+
+function daysBetween(a, b) {
+  if (!a || !b) return 0;
+  return Math.round((b - a) / (1000*60*60*24));
+}
+
+function midDate(inicio, fim) {
+  const a = toDate(inicio), b = toDate(fim);
+  if (!a || !b) return null;
+  const total = daysBetween(a, b);
+  const mid = new Date(a);
+  mid.setDate(mid.getDate() + Math.ceil(total / 2));
+  return mid;
+}
+
+function fmtDate(d) {
+  if (!d) return "—";
+  return d.toLocaleDateString("pt-BR");
+}
+
+function salvarNumero() {
+  let num = document.getElementById("numeroZap").value.replace(/\D/g,'');
+  localStorage.setItem("zap_ptp", num);
+  document.getElementById("numeroZap").value = num;
+}
+
+function addRow(data = {}, skipSave = false) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input type="text" list="lista-empresas" class="f-emp" value="${data.empresa||""}" onchange="onChangeField()" placeholder="..."></td>
+    <td><input type="text" list="lista-atividades" class="f-atv" value="${data.atividade||""}" onchange="onChangeField()" placeholder="..."></td>
+    <td><input type="date" class="f-ini" value="${data.inicio||""}" onchange="onChangeField()"></td>
+    <td><input type="date" class="f-fim" value="${data.fim||""}" onchange="onChangeField()"></td>
+    <td><input type="text" class="f-num" placeholder="Ex.: PTP 19" value="${data.nump||""}" onchange="onChangeField()"></td>
+    <td><input type="text" class="f-fa" placeholder="Ex: 1968" value="${data.fa||""}" onchange="onChangeField()"></td>
+    <td><input type="text" class="f-turno" placeholder="Ex: 1º Turno" value="${data.turno||""}" onchange="onChangeField()"></td>
+    <td><input type="text" class="f-local" placeholder="Ex: Família 1" value="${data.local||""}" onchange="onChangeField()"></td>
+    <td><input type="text" class="f-supervisor" placeholder="Ex: Kleber" value="${data.supervisor||""}" onchange="onChangeField()"></td>
+    <td class="col-status"><span class="status-txt">—</span></td>
+    <td><button class="del" onclick="confirmarExclusao(this)">X</button></td>
+    
+    <input type="hidden" class="f-flag-solic" value="${data.flagSolic||''}">
+    <input type="hidden" class="f-flag-reserva" value="${data.flagReserva||''}">
+  `;
+  document.getElementById("body").appendChild(tr);
+  if (!skipSave) onChangeField(false);
+}
+
+function confirmarExclusao(btn) {
+  if(confirm("⚠️ ATENÇÃO: Você está prestes a APAGAR esta linha.\nDeseja continuar?")) {
+    btn.closest('tr').remove();
+    onChangeField();
+  }
+}
+
+function collectData() {
+  const rows = [];
+  document.querySelectorAll("#body tr").forEach(tr => {
+    rows.push({
+      empresa: tr.querySelector(".f-emp").value,
+      atividade: tr.querySelector(".f-atv").value,
+      inicio: tr.querySelector(".f-ini").value,
+      fim: tr.querySelector(".f-fim").value,
+      nump: tr.querySelector(".f-num").value,
+      fa: tr.querySelector(".f-fa").value,
+      turno: tr.querySelector(".f-turno").value,
+      local: tr.querySelector(".f-local").value,
+      supervisor: tr.querySelector(".f-supervisor").value,
+      flagSolic: tr.querySelector(".f-flag-solic").value,
+      flagReserva: tr.querySelector(".f-flag-reserva").value
+    });
+  });
+  return rows;
+}
+
+function renderAll(data) {
+  document.getElementById("body").innerHTML = "";
+  data.forEach(d => addRow(d, true));
+  updateAlerts(true); 
+}
+
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(collectData()));
+    markSaved();
+  } catch (e) { console.warn("Erro ao salvar:", e); }
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { console.warn("Erro ao carregar:", e); }
+  return null;
+}
+
+function sortTable(skipSave = false) {
+  const data = collectData();
+  data.sort((a, b) => {
+    const e = (a.empresa||"").localeCompare(b.empresa||"", "pt-BR");
+    if (e !== 0) return e;
+    return (a.inicio||"").localeCompare(b.inicio||"");
+  });
+  renderAll(data);
+  if (!skipSave) save();
+}
+
+function onChangeField(doSort = false) {
+  if (doSort) sortTable(true);
+  updateAlerts();
+  save();
+}
+
+function acaoSolicitado(index) {
+  const tr = document.querySelectorAll("#body tr")[index];
+  if(tr) {
+    tr.querySelector(".f-flag-solic").value = "SIM";
+    updateAlerts();
+    save();
+  }
+}
+
+function acaoReservado(index) {
+  const tr = document.querySelectorAll("#body tr")[index];
+  if(tr) {
+    tr.querySelector(".f-flag-reserva").value = "SIM";
+    updateAlerts();
+    save();
+  }
+}
+
+function enviarZapItem(index) {
+  const tr = document.querySelectorAll("#body tr")[index];
+  const num = localStorage.getItem("zap_ptp") || "";
+  
+  if (!num) {
+    alert("Por favor, preencha o número do Zap no topo da tela primeiro!");
+    return;
+  }
+
+  const emp = tr.querySelector(".f-emp").value;
+  const atv = tr.querySelector(".f-atv").value;
+  const fa = tr.querySelector(".f-fa").value;
+  const turno = tr.querySelector(".f-turno").value;
+  const local = tr.querySelector(".f-local").value;
+  const supervisor = tr.querySelector(".f-supervisor").value;
+  const dFim = toDate(tr.querySelector(".f-fim").value);
+
+  const texto = `*FORMULÁRIO PARA SOLICITAÇÃO DE PTP (RENOVAÇÃO)*%0A%0A` +
+                `*Empresa:*%0A${emp}%0A%0A` +
+                `*Atividade:*%0A${atv}%0A%0A` +
+                `*Turno/Horário:*%0A${turno || '—'}%0A%0A` +
+                `*Data de Vencimento:*%0A${fmtDate(dFim)}%0A%0A` +
+                `*Nº da FA:*%0A${fa || '—'}%0A%0A` +
+                `*Local da Atividade:*%0A${local || '—'}%0A%0A` +
+                `*Supervisor Responsável:*%0A${supervisor || '—'}`;
+
+  const url = `https://wa.me/${num}?text=${texto}`;
+  window.open(url, '_blank');
+  
+  acaoSolicitado(index);
+}
+
+let itensParaZap = [];
+
+function enviarWhatsAppDoModal() {
+  if (itensParaZap.length === 0) return;
+  const num = localStorage.getItem("zap_ptp") || "";
+  
+  if (!num) {
+    alert("Por favor, preencha o número do Zap no topo da tela primeiro!");
+    fecharModal();
+    return;
+  }
+
+  let texto = `*FORMULÁRIO PARA SOLICITAÇÃO DE PTP (RENOVAÇÃO)*%0A%0A`;
+
+  itensParaZap.forEach((item, i) => {
+    const tr = document.querySelectorAll("#body tr")[item.index];
+    if(!tr) return;
+
+    const emp = tr.querySelector(".f-emp").value;
+    const atv = tr.querySelector(".f-atv").value;
+    const fa = tr.querySelector(".f-fa").value;
+    const turno = tr.querySelector(".f-turno").value;
+    const local = tr.querySelector(".f-local").value;
+    const supervisor = tr.querySelector(".f-supervisor").value;
+    const dFim = toDate(tr.querySelector(".f-fim").value);
+
+    texto += `*Empresa:*%0A${emp}%0A%0A`;
+    texto += `*Atividade:*%0A${atv}%0A%0A`;
+    texto += `*Turno/Horário:*%0A${turno || '—'}%0A%0A`;
+    texto += `*Data de Vencimento:*%0A${fmtDate(dFim)}%0A%0A`;
+    texto += `*Nº da FA:*%0A${fa || '—'}%0A%0A`;
+    texto += `*Local da Atividade:*%0A${local || '—'}%0A%0A`;
+    texto += `*Supervisor Responsável:*%0A${supervisor || '—'}`;
+    
+    if (i < itensParaZap.length - 1) {
+      texto += `%0A%0A--------------------%0A%0A`;
+    }
+
+    tr.querySelector(".f-flag-solic").value = "SIM";
+  });
+
+  const url = `https://wa.me/${num}?text=${texto}`;
+  window.open(url, '_blank');
+  
+  fecharModal();
+  updateAlerts();
+  save();
+}
+
+function fecharModal() {
+  document.getElementById("modalAlerta").style.display = "none";
+}
+
+function checarPopUpInicial(pendentes) {
+  const ultimoAviso = localStorage.getItem("ultimo_aviso_zap");
+  const agora = new Date().getTime();
+  const dezMinutos = 10 * 60 * 1000;
+
+  if (ultimoAviso && (agora - parseInt(ultimoAviso)) < dezMinutos) return;
+
+  if (pendentes.length > 0) {
+    document.getElementById("modalTexto").innerHTML = `Existem <b>${pendentes.length} PTP(s)</b> que precisam de ação.<br><br>Deseja enviar a solicitação agora pelo WhatsApp?`;
+    document.getElementById("modalAlerta").style.display = "flex";
+    localStorage.setItem("ultimo_aviso_zap", agora);
+  }
+}
+
+function updateAlerts(checarPopUp = false) {
+  const rows = document.querySelectorAll("#body tr");
+  const hoje = new Date();
+  hoje.setHours(0,0,0,0);
+
+  let total = rows.length;
+  let pendentesHtml = "";
+  let aguardandoCount = 0;
+  let pendenteCount = 0;
+  let reservadoCount = 0;
+  itensParaZap = []; 
+
+  rows.forEach((tr, index) => {
+    const emp = tr.querySelector(".f-emp").value;
+    const atv = tr.querySelector(".f-atv").value;
+    const inicio = tr.querySelector(".f-ini").value;
+    const fim = tr.querySelector(".f-fim").value;
+    const nump = tr.querySelector(".f-num").value;
+    
+    const flagSolic = tr.querySelector(".f-flag-solic").value;
+    const flagReserva = tr.querySelector(".f-flag-reserva").value;
+
+    const tdStatus = tr.querySelector(".col-status");
+    const statusTxt = tr.querySelector(".status-txt");
+
+    const dIni = toDate(inicio);
+    const dFim = toDate(fim);
+    const mid = midDate(inicio, fim);
+
+    tdStatus.className = "col-status";
+    statusTxt.textContent = "—";
+
+    if (dIni && dFim) {
+      if (hoje > dFim) {
+        if (flagReserva === "SIM") {
+          tdStatus.classList.add("status-vencida");
+          statusTxt.textContent = "VENCIDA (MAS TEM RESERVA)";
+          reservadoCount++;
+        } else {
+          tdStatus.classList.add("status-vencida");
+          statusTxt.textContent = "VENCIDA";
+        }
+      } 
+      else if (hoje >= mid) {
+        if (flagReserva === "SIM") {
+          tdStatus.classList.add("status-reservado");
+          statusTxt.textContent = "RESERVADO (NA PASTA) ✔";
+          reservadoCount++;
+        } 
+        else if (flagSolic === "SIM") {
+          tdStatus.classList.add("status-pendente");
+          statusTxt.textContent = "PENDENTE (AGUARDANDO)";
+          pendenteCount++;
+          
+          pendentesHtml += `
+            <div class="card-pendencia">
+              <div>
+                <strong>${emp || 'Empresa'}</strong> ${nump ? '(Nº ' + nump + ')' : ''}<br>
+                ${atv || 'Atividade'} • <span style="color:#b9770e; font-weight:bold;">Aguardando entrega</span>
+              </div>
+              <div>
+                <button class="btn-ok" onclick="acaoReservado(${index})">PTP Chegou</button>
+              </div>
+            </div>
+          `;
+        } 
+        else {
+          tdStatus.classList.add("status-aguardando");
+          statusTxt.textContent = "AGUARDANDO RENOVAÇÃO";
+          aguardandoCount++;
+          
+          itensParaZap.push({ index, emp, atv, nump, fim });
+          
+          pendentesHtml += `
+            <div class="card-pendencia">
+              <div>
+                <strong>${emp || 'Empresa'}</strong> ${nump ? '(Nº ' + nump + ')' : ''}<br>
+                ${atv || 'Atividade'} • <span style="color:#d35400; font-weight:bold;">Solicitar renovação</span>
+              </div>
+              <div>
+                <button class="btn-zap" onclick="enviarZapItem(${index})">Zap</button>
+                <button class="btn-ok" onclick="acaoSolicitado(${index})">Solicitado</button>
+              </div>
+            </div>
+          `;
+        }
+      } else {
+        tdStatus.classList.add("status-ativa");
+        statusTxt.textContent = "ATIVA";
+      }
+    }
+  });
+
+  document.getElementById("counter").textContent =
+    `Total: ${total} | Reservados: ${reservadoCount} | Pendentes: ${pendenteCount} | Aguardando Renovação: ${aguardandoCount}`;
+
+  const painel = document.getElementById("painelPendencias");
+  const lista = document.getElementById("listaPendencias");
+  if (itensParaZap.length === 0 && pendenteCount === 0) {
+    painel.style.display = "none";
+  } else {
+    painel.style.display = "block";
+    lista.innerHTML = pendentesHtml;
+  }
+
+  if (checarPopUp) {
+    checarPopUpInicial(itensParaZap);
+  }
+}
+
+function exportCSV() {
+  const rows = [["Empresa","Atividade","Início","Fim","Nº PTP","Nº FA","Turno","Local","Supervisor","Status"]];
+  collectData().forEach(d => {
+    let status = "ATIVA";
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    const dIni = toDate(d.inicio), dFim = toDate(d.fim);
+    const mid = midDate(d.inicio, d.fim);
+    
+    if (dIni && dFim) {
+      if (hoje > dFim) {
+        status = d.flagReserva === "SIM" ? "VENCIDA COM RESERVA" : "VENCIDA";
+      }
+      else if (hoje >= mid) {
+        if(d.flagReserva === "SIM") status = "RESERVADO";
+        else if (d.flagSolic === "SIM") status = "PENDENTE";
+        else status = "AGUARDANDO RENOVAÇÃO";
+      }
+    }
+    rows.push([d.empresa,d.atividade,d.inicio,d.fim,d.nump,d.fa,d.turno,d.local,d.supervisor, status]);
+  });
+
+  const csv = rows.map(r => r.map(c => `"${(c||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8;"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `controle_ptp_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+function clearAll() {
+  if (!confirm("Apagar TODAS as linhas? Esta ação não pode ser desfeita.")) return;
+  document.getElementById("body").innerHTML = "";
+  updateAlerts();
+  save();
+}
+
+(function init() {
+  const numSalvo = localStorage.getItem("zap_ptp");
+  if (numSalvo) document.getElementById("numeroZap").value = numSalvo;
+
+  const saved = load();
+  if (saved && saved.length) {
+    renderAll(saved);
+  } else {
+    addRow({empresa:"Evastec", atividade:"Montagem de Infra Elétrica", inicio:"2026-10-31", fim:"2026-11-06", nump:"PTP 19", fa:"1968", turno:"1º Turno (07:00h às 18:00h)", local:"Família 1 / COL: A8 a A15", supervisor:"Kleber Calixto"}, true);
+    updateAlerts(true);
+    save();
+  }
+
+  setInterval(() => {
+    updateAlerts(true);
+  }, 60000);
+})();
+</script>
+</body>
+</html>
